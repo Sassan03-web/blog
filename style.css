@@ -1,0 +1,157 @@
+:root{
+  --iron:#141414;
+  --gunmetal:#1E1E1E;
+  --seam:#2E2E2E;
+  --plate:#EDEDED;
+  --safety:#FF5500;
+  --grease:#8A8A8A;
+  --ink:#1A1A1A;
+  --disp:"Saira Condensed", sans-serif;
+  --body:"IBM Plex Sans JP","Hiragino Kaku Gothic ProN",sans-serif;
+  --mono:"IBM Plex Mono", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  background:var(--iron);
+  color:var(--plate);
+  font-family:var(--body);
+  min-height:100vh;
+  display:flex;flex-direction:column;
+}
+
+/* ===== ヘッダー ===== */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;
+  border-bottom:6px solid;
+  border-image:repeating-linear-gradient(-45deg,var(--safety) 0 12px,var(--iron) 12px 24px) 6;
+  background:var(--gunmetal);
+}
+.brand{display:flex;align-items:baseline;gap:10px;text-decoration:none;color:var(--plate)}
+.brand h1{
+  font-family:var(--disp);font-weight:700;font-size:22px;
+  letter-spacing:.14em;text-transform:uppercase;
+}
+.brand h1 .dot{color:var(--safety)}
+.brand .sub{font-size:11px;color:var(--grease);letter-spacing:.08em}
+.head-right{display:flex;align-items:center;gap:8px}
+.tool{
+  background:none;border:1px solid var(--seam);cursor:pointer;
+  font-family:var(--mono);font-size:11px;color:var(--grease);
+  letter-spacing:.1em;padding:5px 10px;text-decoration:none;
+  display:inline-block;
+}
+.tool:hover{color:var(--plate);border-color:var(--grease)}
+.tool:focus-visible{outline:2px solid var(--safety);outline-offset:1px}
+
+/* ===== 本文レイアウト ===== */
+main{
+  flex:1;width:100%;max-width:720px;margin:0 auto;
+  padding:28px 16px 64px;
+  display:flex;flex-direction:column;gap:14px;
+}
+.status{
+  font-family:var(--mono);font-size:12px;color:var(--grease);
+  letter-spacing:.12em;text-align:center;padding:24px 0;
+}
+
+/* ===== 鋼板(記事) ===== */
+.plate{
+  background:var(--plate);color:var(--ink);
+  border-left:4px solid var(--safety);
+  box-shadow:0 2px 0 rgba(0,0,0,.55);
+}
+.plate-head{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:9px 14px 0;
+  font-family:var(--mono);font-size:11px;color:#5c5c5c;
+  letter-spacing:.08em;
+}
+.plate-head .serial{color:var(--safety);font-weight:500}
+.plate-head .spacer{flex:1}
+.plate-title{
+  font-family:var(--body);font-weight:700;font-size:17px;
+  padding:8px 14px 0;line-height:1.5;
+}
+.plate-body{
+  padding:8px 14px 14px;
+  font-size:14.5px;line-height:1.85;
+  word-break:break-word;
+}
+.plate-body p{margin:0 0 .9em}
+.plate-body p:last-child{margin-bottom:0}
+.plate-body h2{
+  font-size:15px;margin:1.1em 0 .5em;
+  padding-left:8px;border-left:3px solid var(--safety);
+}
+.plate-body ul{margin:0 0 .9em;padding-left:1.4em}
+.plate-body a{color:var(--safety);word-break:break-all}
+.plate-body strong{background:linear-gradient(transparent 68%, rgba(255,85,0,.28) 68%)}
+
+/* ===== 執筆室 ===== */
+.panel{
+  background:var(--gunmetal);border:1px solid var(--seam);
+  padding:16px;display:flex;flex-direction:column;gap:10px;
+}
+.panel label{
+  font-family:var(--mono);font-size:11px;color:var(--grease);
+  letter-spacing:.12em;
+}
+.panel input,.panel textarea{
+  width:100%;
+  background:var(--iron);color:var(--plate);
+  border:1px solid var(--seam);
+  font-family:var(--body);font-size:15px;line-height:1.7;
+  padding:10px 12px;
+}
+.panel textarea{resize:vertical;min-height:180px}
+.panel input:focus,.panel textarea:focus{outline:none;border-color:var(--safety)}
+.panel ::placeholder{color:#5a5a5a}
+.row{display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.btn{
+  background:var(--safety);color:#fff;border:none;cursor:pointer;
+  font-family:var(--disp);font-weight:700;font-size:15px;
+  letter-spacing:.18em;text-transform:uppercase;
+  padding:10px 24px;
+}
+.btn:hover{background:#ff6a1f}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{background:#5a5a5a;cursor:wait}
+.btn:focus-visible{outline:2px solid var(--plate);outline-offset:2px}
+.msg{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--grease)}
+.msg.err{color:#ff8a5c}
+.msg.ok{color:#8fd18f}
+
+/* 管理画面の記事操作ボタン */
+.plate-head button{
+  background:none;border:none;cursor:pointer;
+  font-family:var(--mono);font-size:11px;color:#8a8a8a;
+  letter-spacing:.1em;padding:2px 4px;
+}
+.plate-head button:hover{color:var(--ink)}
+.plate-head button.arm{color:#fff;background:var(--safety)}
+.plate textarea.edit-area,.plate input.edit-title{
+  width:calc(100% - 28px);margin:8px 14px 0;
+  border:1px dashed var(--safety);background:#fff;
+  font-family:var(--body);font-size:14.5px;line-height:1.75;color:var(--ink);
+  padding:8px 10px;
+}
+.plate textarea.edit-area{resize:vertical;min-height:120px}
+.plate .edit-row{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px 14px}
+.plate .edit-row button{
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+  padding:5px 14px;cursor:pointer;border:1px solid #999;
+  background:none;color:#555;
+}
+.plate .edit-row .save{background:var(--safety);border-color:var(--safety);color:#fff}
+
+footer{
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--seam);
+  font-family:var(--mono);font-size:10.5px;color:#5a5a5a;
+  letter-spacing:.1em;text-align:center;
+}
+@media (max-width:480px){
+  .brand .sub{display:none}
+  .brand h1{font-size:18px}
+}

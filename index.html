@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1E1E1E">
+<link rel="icon" href="icon-192.png">
+<title>STACKYARD LOG — 日誌</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="./">
+    <h1>STACKYARD<span class="dot">/</span>LOG</h1>
+    <span class="sub">日誌・雑記置き場</span>
+  </a>
+</header>
+
+<main id="feed">
+  <div class="status" id="status">— LOADING —</div>
+</main>
+
+<footer>STACKYARD LOG</footer>
+
+<script>
+function pad(n,l){return String(n).padStart(l||2,'0')}
+function fmt(ts){
+  const d=new Date(ts);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
+    +' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function esc(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// 簡易マークダウン: ## 見出し / **強調** / [文字](URL) / - 箇条書き
+function md(src){
+  const lines=esc(src).split(/\r?\n/);
+  let html='',para=[],list=[];
+  function inline(s){
+    return s
+      .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+  function flushP(){if(para.length){html+='<p>'+para.map(inline).join('<br>')+'</p>';para=[]}}
+  function flushL(){if(list.length){html+='<ul>'+list.map(x=>'<li>'+inline(x)+'</li>').join('')+'</ul>';list=[]}}
+  lines.forEach(line=>{
+    if(/^##?\s+/.test(line)){flushP();flushL();html+='<h2>'+inline(line.replace(/^##?\s+/,''))+'</h2>'}
+    else if(/^-\s+/.test(line)){flushP();list.push(line.replace(/^-\s+/,''))}
+    else if(line.trim()===''){flushP();flushL()}
+    else{flushL();para.push(line)}
+  });
+  flushP();flushL();
+  return html;
+}
+
+fetch('posts.json?v='+Date.now())
+  .then(r=>{if(!r.ok)throw 0;return r.json()})
+  .then(posts=>{
+    const feed=document.getElementById('feed');
+    feed.innerHTML='';
+    if(!posts.length){
+      feed.innerHTML='<div class="status">— NO ENTRIES —</div>';
+      return;
+    }
+    // 新しい記事が上
+    posts.slice().sort((a,b)=>b.ts-a.ts).forEach((p,idx)=>{
+      const no=posts.length-idx;
+      const art=document.createElement('article');
+      art.className='plate';
+      art.id='p'+p.ts;
+      art.innerHTML=
+        '<div class="plate-head">'
+        +'<span class="serial">No.'+pad(no,3)+'</span>'
+        +'<span>'+fmt(p.ts)+(p.edited?' ・改':'')+'</span>'
+        +'</div>'
+        +(p.title?'<div class="plate-title">'+esc(p.title)+'</div>':'')
+        +'<div class="plate-body">'+md(p.body)+'</div>';
+      feed.appendChild(art);
+    });
+  })
+  .catch(()=>{
+    document.getElementById('status').textContent='— 読み込みに失敗しました —';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1E1E1E">
+<meta name="robots" content="noindex">
+<link rel="icon" href="icon-192.png">
+<title>執筆室 — STACKYARD LOG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="./">
+    <h1>WRITE<span class="dot">/</span>ROOM</h1>
+    <span class="sub">執筆室(あなた専用)</span>
+  </a>
+  <div class="head-right">
+    <a class="tool" href="./">ブログを見る</a>
+    <button class="tool" id="setup">設定</button>
+  </div>
+</header>
+
+<main>
+  <!-- 初期設定パネル -->
+  <div class="panel" id="config" hidden>
+    <label>リポジトリ(ユーザー名/リポジトリ名)</label>
+    <input id="repo" placeholder="例: sassan03-web/blog" autocomplete="off">
+    <label>アクセストークン(このブラウザにのみ保存されます)</label>
+    <input id="token" type="password" placeholder="github_pat_ から始まる文字列" autocomplete="off">
+    <div class="row">
+      <span class="msg">※トークンの作り方は同梱の説明書を参照</span>
+      <button class="btn" id="saveConfig">保存</button>
+    </div>
+  </div>
+
+  <!-- 投稿パネル -->
+  <div class="panel" id="composer">
+    <label>タイトル(省略可)</label>
+    <input id="title" placeholder="無題でもOK" autocomplete="off">
+    <label>本文(## 見出し / **強調** / [リンク](URL) / - 箇条書き が使えます)</label>
+    <textarea id="body" placeholder="今日あったこと、思いついたこと"></textarea>
+    <div class="row">
+      <span class="msg" id="msg"></span>
+      <button class="btn" id="post">掲示</button>
+    </div>
+  </div>
+
+  <div class="status" id="status">— LOADING —</div>
+  <div id="list"></div>
+</main>
+
+<footer>WRITE/ROOM — 掲示から反映まで1分ほどかかります</footer>
+
+<script>
+const CFG_KEY='stackyard.log.cfg';
+let cfg=null;
+try{cfg=JSON.parse(localStorage.getItem(CFG_KEY))}catch(e){}
+let posts=[],sha=null,busy=false;
+
+const $=id=>document.getElementById(id);
+function pad(n,l){return String(n).padStart(l||2,'0')}
+function fmt(ts){
+  const d=new Date(ts);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
+    +' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function msg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'')}
+
+// ===== GitHub API =====
+function api(path,opt){
+  opt=opt||{};
+  opt.headers=Object.assign({
+    'Authorization':'Bearer '+cfg.token,
+    'Accept':'application/vnd.github+json'
+  },opt.headers||{});
+  return fetch('https://api.github.com/repos/'+cfg.repo+'/contents/'+path,opt);
+}
+function b64decode(s){return decodeURIComponent(escape(atob(s.replace(/\n/g,''))))}
+function b64encode(s){return btoa(unescape(encodeURIComponent(s)))}
+
+function load(){
+  $('status').textContent='— LOADING —';
+  api('posts.json').then(r=>{
+    if(r.status===404){posts=[];sha=null;renderList();return}
+    if(r.status===401||r.status===403)throw new Error('auth');
+    if(!r.ok)throw new Error('http');
+    return r.json().then(d=>{
+      sha=d.sha;
+      posts=JSON.parse(b64decode(d.content));
+      renderList();
+    });
+  }).catch(e=>{
+    $('status').textContent= e.message==='auth'
+      ? '— 認証エラー: 設定からトークンを確認してください —'
+      : '— 読み込みに失敗しました(設定を確認してください) —';
+  });
+}
+
+function commit(message){
+  const body={
+    message:message,
+    content:b64encode(JSON.stringify(posts,null,1))
+  };
+  if(sha)body.sha=sha;
+  return api('posts.json',{method:'PUT',body:JSON.stringify(body)})
+    .then(r=>{
+      if(!r.ok)throw new Error(r.status===409?'conflict':'save');
+      return r.json();
+    })
+    .then(d=>{sha=d.content.sha});
+}
+
+// ===== 投稿 =====
+$('post').addEventListener('click',()=>{
+  if(busy)return;
+  const body=$('body').value.trim();
+  if(!body){msg('本文が空です','err');return}
+  if(!cfg){showConfig();msg('先に設定が必要です','err');return}
+  busy=true;$('post').disabled=true;msg('掲示中…');
+  posts.push({title:$('title').value.trim(),body:body,ts:Date.now(),edited:false});
+  commit('post: new entry').then(()=>{
+    $('title').value='';$('body').value='';
+    msg('掲示しました。反映まで1分ほど','ok');
+    renderList();
+  }).catch(err=>{
+    posts.pop();
+    msg(err.message==='conflict'?'他の場所での更新と衝突しました。再読込してください':'保存に失敗しました','err');
+  }).finally(()=>{busy=false;$('post').disabled=false});
+});
+
+// ===== 一覧・編集・削除 =====
+function renderList(){
+  $('status').textContent=posts.length?'':'— NO ENTRIES —';
+  const list=$('list');
+  list.innerHTML='';
+  posts.slice().sort((a,b)=>b.ts-a.ts).forEach(p=>{
+    const i=posts.indexOf(p);
+    const art=document.createElement('article');
+    art.className='plate';
+    const head=document.createElement('div');
+    head.className='plate-head';
+    head.innerHTML='<span class="serial">No.'+pad(i+1,3)+'</span>'
+      +'<span>'+fmt(p.ts)+(p.edited?' ・改':'')+'</span><span class="spacer"></span>';
+    const eBtn=document.createElement('button');eBtn.textContent='EDIT';
+    const dBtn=document.createElement('button');dBtn.textContent='DEL';
+    head.appendChild(eBtn);head.appendChild(dBtn);
+    const title=document.createElement('div');
+    title.className='plate-title';title.textContent=p.title||'(無題)';
+    const body=document.createElement('div');
+    body.className='plate-body';
+    body.style.whiteSpace='pre-wrap';
+    body.textContent=p.body.length>140?p.body.slice(0,140)+'…':p.body;
+    art.appendChild(head);art.appendChild(title);art.appendChild(body);
+    list.appendChild(art);
+
+    let armed=false,timer=null;
+    dBtn.addEventListener('click',()=>{
+      if(busy)return;
+      if(!armed){
+        armed=true;dBtn.textContent='SURE?';dBtn.classList.add('arm');
+        timer=setTimeout(()=>{armed=false;dBtn.textContent='DEL';dBtn.classList.remove('arm')},2500);
+      }else{
+        clearTimeout(timer);busy=true;
+        const removed=posts.splice(i,1)[0];
+        commit('post: delete entry').then(renderList).catch(()=>{
+          posts.splice(i,0,removed);
+          alert('削除に失敗しました');
+        }).finally(()=>{busy=false});
+      }
+    });
+
+    eBtn.addEventListener('click',()=>{
+      if(art.querySelector('textarea'))return;
+      const ti=document.createElement('input');
+      ti.className='edit-title';ti.value=p.title||'';ti.placeholder='タイトル(省略可)';
+      const ta=document.createElement('textarea');
+      ta.className='edit-area';ta.value=p.body;
+      const row=document.createElement('div');row.className='edit-row';
+      const cancel=document.createElement('button');cancel.textContent='取消';
+      const ok=document.createElement('button');ok.textContent='保存';ok.className='save';
+      row.appendChild(cancel);row.appendChild(ok);
+      title.replaceWith(ti);body.replaceWith(ta);art.appendChild(row);
+      ta.focus();
+      cancel.addEventListener('click',renderList);
+      ok.addEventListener('click',()=>{
+        if(busy)return;
+        const v=ta.value.trim();
+        if(!v){renderList();return}
+        const before={title:p.title,body:p.body,edited:p.edited};
+        p.title=ti.value.trim();p.body=v;p.edited=true;busy=true;
+        commit('post: edit entry').then(renderList).catch(()=>{
+          Object.assign(p,before);
+          alert('保存に失敗しました');
+          renderList();
+        }).finally(()=>{busy=false});
+      });
+    });
+  });
+}
+
+// ===== 設定 =====
+function showConfig(){
+  $('config').hidden=false;
+  if(cfg){$('repo').value=cfg.repo;$('token').value=cfg.token}
+}
+$('setup').addEventListener('click',showConfig);
+$('saveConfig').addEventListener('click',()=>{
+  const repo=$('repo').value.trim().replace(/^https:\/\/github\.com\//,'').replace(/\/$/,'');
+  const token=$('token').value.trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){alert('リポジトリは「ユーザー名/リポジトリ名」の形で入力してください');return}
+  if(!token){alert('トークンを入力してください');return}
+  cfg={repo:repo,token:token};
+  localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
+  $('config').hidden=true;
+  load();
+});
+
+if(cfg){load()}else{showConfig();$('status').textContent='— 初回設定をしてください —'}
+</script>
+</body>
+</html>
