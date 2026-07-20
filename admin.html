@@ -151,7 +151,7 @@ function renderList(){
     const head=document.createElement('div');
     head.className='plate-head';
     head.innerHTML='<span class="serial">No.'+pad(i+1,3)+'</span>'
-      +'<span>'+fmt(p.ts)+(p.edited?' ・改':'')+'</span><span class="spacer"></span>';
+      +'<span>'+fmt(p.ts)+'</span><span class="spacer"></span>';
     const eBtn=document.createElement('button');eBtn.textContent='EDIT';
     const dBtn=document.createElement('button');dBtn.textContent='DEL';
     head.appendChild(eBtn);head.appendChild(dBtn);
