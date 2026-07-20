@@ -10,6 +10,19 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<style>
+.plate-body img{max-width:100%;height:auto;display:block;margin:.4em 0;border:1px solid #ccc}
+.plate-body .yt{position:relative;width:100%;aspect-ratio:16/9;margin:.6em 0}
+.plate-body .yt iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.plate-head a{color:inherit;text-decoration:none}
+.plate-head a:hover .serial{text-decoration:underline}
+.backlink{
+  font-family:var(--mono);font-size:12px;letter-spacing:.1em;
+  color:var(--grease);text-decoration:none;
+  border:1px solid var(--seam);padding:6px 12px;align-self:flex-start;
+}
+.backlink:hover{color:var(--plate);border-color:var(--grease)}
+</style>
 </head>
 <body>
 
@@ -36,55 +49,137 @@ function fmt(ts){
 function esc(s){
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-// 簡易マークダウン: ## 見出し / **強調** / [文字](URL) / - 箇条書き
+
+// ===== 簡易マークダウン =====
+// ## 見出し / **強調** / [文字](URL) / - 箇条書き / ![説明](画像URL)
+// 行にYouTube・XのURLだけを書くと埋め込み表示
+let needsTwitter=false;
 function md(src){
   const lines=esc(src).split(/\r?\n/);
   let html='',para=[],list=[];
   function inline(s){
     return s
+      .replace(/!\[([^\]]*)\]\(([^\s)]+)\)/g,'<img src="$2" alt="$1" loading="lazy">')
       .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
   }
   function flushP(){if(para.length){html+='<p>'+para.map(inline).join('<br>')+'</p>';para=[]}}
   function flushL(){if(list.length){html+='<ul>'+list.map(x=>'<li>'+inline(x)+'</li>').join('')+'</ul>';list=[]}}
-  lines.forEach(line=>{
-    if(/^##?\s+/.test(line)){flushP();flushL();html+='<h2>'+inline(line.replace(/^##?\s+/,''))+'</h2>'}
+  function ytId(u){
+    const m=u.match(/^https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/);
+    return m?m[1]:null;
+  }
+  function xUrl(u){
+    return /^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[\w]+\/status\/\d+/.test(u)?u.replace(/[?#].*$/,''):null;
+  }
+  lines.forEach(raw=>{
+    const line=raw,t=raw.trim();
+    const yt=ytId(t),x=xUrl(t);
+    if(yt){
+      flushP();flushL();
+      html+='<div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/'+yt+'" title="YouTube" loading="lazy" allowfullscreen allow="encrypted-media; picture-in-picture"></iframe></div>';
+    }else if(x){
+      flushP();flushL();needsTwitter=true;
+      html+='<blockquote class="twitter-tweet"><a href="'+x.replace(/x\.com/,'twitter.com')+'"></a></blockquote>';
+    }else if(/^##?\s+/.test(line)){flushP();flushL();html+='<h2>'+inline(line.replace(/^##?\s+/,''))+'</h2>'}
     else if(/^-\s+/.test(line)){flushP();list.push(line.replace(/^-\s+/,''))}
-    else if(line.trim()===''){flushP();flushL()}
+    else if(t===''){flushP();flushL()}
     else{flushL();para.push(line)}
   });
   flushP();flushL();
   return html;
 }
 
-fetch('posts.json?v='+Date.now())
-  .then(r=>{if(!r.ok)throw 0;return r.json()})
-  .then(posts=>{
-    const feed=document.getElementById('feed');
-    feed.innerHTML='';
-    if(!posts.length){
-      feed.innerHTML='<div class="status">— NO ENTRIES —</div>';
-      return;
+// ===== PV計測(GoatCounter / settings.jsonにコード設定時のみ) =====
+let gcReady=false,gcQueue=[];
+function gcInit(code){
+  window.goatcounter={no_onload:true,endpoint:'https://'+code+'.goatcounter.com/count'};
+  const s=document.createElement('script');
+  s.async=true;s.src='https://gc.zgo.at/count.js';
+  s.addEventListener('load',()=>{gcReady=true;gcQueue.forEach(a=>window.goatcounter.count(a));gcQueue=[]});
+  document.head.appendChild(s);
+}
+function gcCount(path,title){
+  if(!window.goatcounter)return;
+  const a={path:path,title:title};
+  if(gcReady)window.goatcounter.count(a);else gcQueue.push(a);
+}
+// フィード上で記事が画面に入ったら1PVとして数える
+const seen=new Set();
+const io=('IntersectionObserver' in window)?new IntersectionObserver(ents=>{
+  ents.forEach(e=>{
+    if(e.isIntersecting&&!seen.has(e.target.dataset.path)){
+      seen.add(e.target.dataset.path);
+      gcCount(e.target.dataset.path,e.target.dataset.title);
+      io.unobserve(e.target);
     }
-    // 新しい記事が上
-    posts.slice().sort((a,b)=>b.ts-a.ts).forEach((p,idx)=>{
-      const no=posts.length-idx;
-      const art=document.createElement('article');
-      art.className='plate';
-      art.id='p'+p.ts;
-      art.innerHTML=
-        '<div class="plate-head">'
-        +'<span class="serial">No.'+pad(no,3)+'</span>'
-        +'<span>'+fmt(p.ts)+(p.edited?' ・改':'')+'</span>'
-        +'</div>'
-        +(p.title?'<div class="plate-title">'+esc(p.title)+'</div>':'')
-        +'<div class="plate-body">'+md(p.body)+'</div>';
-      feed.appendChild(art);
-    });
-  })
-  .catch(()=>{
-    document.getElementById('status').textContent='— 読み込みに失敗しました —';
   });
+},{threshold:.5}):null;
+
+// ===== 描画 =====
+function makePlate(p,no,link){
+  needsTwitter=false;
+  const art=document.createElement('article');
+  art.className='plate';
+  const permalink='?p='+p.ts;
+  art.innerHTML=
+    '<div class="plate-head">'
+    +(link?'<a href="'+permalink+'"><span class="serial">No.'+pad(no,3)+'</span></a>':'<span class="serial">No.'+pad(no,3)+'</span>')
+    +'<span>'+fmt(p.ts)+(p.edited?' ・改':'')+'</span>'
+    +'</div>'
+    +(p.title?'<div class="plate-title">'+esc(p.title)+'</div>':'')
+    +'<div class="plate-body">'+md(p.body)+'</div>';
+  if(needsTwitter&&!document.getElementById('twjs')){
+    const s=document.createElement('script');
+    s.id='twjs';s.async=true;s.src='https://platform.twitter.com/widgets.js';
+    document.head.appendChild(s);
+  }else if(needsTwitter&&window.twttr&&window.twttr.widgets){
+    setTimeout(()=>window.twttr.widgets.load(art),0);
+  }
+  return art;
+}
+function postPath(p){return '/post/'+p.ts}
+
+Promise.all([
+  fetch('posts.json?v='+Date.now()).then(r=>{if(!r.ok)throw 0;return r.json()}),
+  fetch('settings.json?v='+Date.now()).then(r=>r.ok?r.json():{}).catch(()=>({}))
+]).then(([posts,settings])=>{
+  if(settings.goatcounter)gcInit(settings.goatcounter);
+  const feed=document.getElementById('feed');
+  feed.innerHTML='';
+  const single=new URLSearchParams(location.search).get('p');
+
+  if(single){
+    // 記事単体ページ
+    const p=posts.find(x=>String(x.ts)===single);
+    if(!p){feed.innerHTML='<div class="status">— 記事が見つかりません —</div>';return}
+    const no=posts.indexOf(p)+1;
+    document.title=(p.title||'No.'+pad(no,3))+' — STACKYARD LOG';
+    const back=document.createElement('a');
+    back.className='backlink';back.href='./';back.textContent='← 一覧へ戻る';
+    feed.appendChild(back);
+    feed.appendChild(makePlate(p,no,false));
+    gcCount(postPath(p),p.title||'No.'+pad(no,3));
+    return;
+  }
+
+  // 一覧(新しい記事が上)
+  if(!posts.length){
+    feed.innerHTML='<div class="status">— NO ENTRIES —</div>';
+    return;
+  }
+  gcCount('/','一覧');
+  posts.slice().sort((a,b)=>b.ts-a.ts).forEach(p=>{
+    const no=posts.indexOf(p)+1;
+    const art=makePlate(p,no,true);
+    art.dataset.path=postPath(p);
+    art.dataset.title=p.title||'No.'+pad(no,3);
+    feed.appendChild(art);
+    if(io)io.observe(art);
+  });
+}).catch(()=>{
+  document.getElementById('status').textContent='— 読み込みに失敗しました —';
+});
 </script>
 </body>
 </html>

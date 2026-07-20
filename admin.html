@@ -20,6 +20,7 @@
     <span class="sub">執筆室(あなた専用)</span>
   </a>
   <div class="head-right">
+    <a class="tool" id="pvLink" href="#" target="_blank" rel="noopener" hidden>PVを見る</a>
     <a class="tool" href="./">ブログを見る</a>
     <button class="tool" id="setup">設定</button>
   </div>
@@ -32,6 +33,8 @@
     <input id="repo" placeholder="例: sassan03-web/blog" autocomplete="off">
     <label>アクセストークン(このブラウザにのみ保存されます)</label>
     <input id="token" type="password" placeholder="github_pat_ から始まる文字列" autocomplete="off">
+    <label>GoatCounterコード(PV計測用・任意)</label>
+    <input id="gc" placeholder="例: sassan03-log(○○.goatcounter.com の○○部分)" autocomplete="off">
     <div class="row">
       <span class="msg">※トークンの作り方は同梱の説明書を参照</span>
       <button class="btn" id="saveConfig">保存</button>
@@ -43,8 +46,11 @@
     <label>タイトル(省略可)</label>
     <input id="title" placeholder="無題でもOK" autocomplete="off">
     <label>本文(## 見出し / **強調** / [リンク](URL) / - 箇条書き が使えます)</label>
-    <textarea id="body" placeholder="今日あったこと、思いついたこと"></textarea>
+    <textarea id="body" placeholder="今日あったこと、思いついたこと&#10;YouTubeやXのURLを行に単独で貼ると埋め込みになります"></textarea>
     <div class="row">
+      <button class="tool" id="imgBtn" type="button">画像を挿入</button>
+      <input type="file" id="imgFile" accept="image/*" hidden>
+      <span class="spacer" style="flex:1"></span>
       <span class="msg" id="msg"></span>
       <button class="btn" id="post">掲示</button>
     </div>
@@ -203,10 +209,100 @@ function renderList(){
   });
 }
 
+// ===== サイト設定(settings.json) =====
+let settings={goatcounter:''},settingsSha=null;
+function loadSettings(){
+  api('settings.json').then(r=>{
+    if(!r.ok)return;
+    return r.json().then(d=>{
+      settingsSha=d.sha;
+      try{settings=JSON.parse(b64decode(d.content))}catch(e){}
+      applySettings();
+    });
+  }).catch(()=>{});
+}
+function applySettings(){
+  const pv=$('pvLink');
+  if(settings.goatcounter){
+    pv.hidden=false;
+    pv.href='https://'+settings.goatcounter+'.goatcounter.com';
+  }else{pv.hidden=true}
+}
+function saveSettings(){
+  const body={
+    message:'config: update settings',
+    content:b64encode(JSON.stringify(settings,null,1))
+  };
+  if(settingsSha)body.sha=settingsSha;
+  return api('settings.json',{method:'PUT',body:JSON.stringify(body)})
+    .then(r=>{if(!r.ok)throw 0;return r.json()})
+    .then(d=>{settingsSha=d.content.sha;applySettings()});
+}
+
+// ===== 画像アップロード =====
+const IMG_MAX=1600;
+$('imgBtn').addEventListener('click',()=>{
+  if(!cfg){showConfig();msg('先に設定が必要です','err');return}
+  $('imgFile').click();
+});
+$('imgFile').addEventListener('change',()=>{
+  const f=$('imgFile').files[0];
+  if(!f)return;
+  msg('画像を圧縮中…');
+  shrink(f).then(({base64,ext})=>{
+    msg('画像をアップロード中…');
+    const name='images/'+Date.now()+'.'+ext;
+    return api(name,{method:'PUT',body:JSON.stringify({
+      message:'img: upload',content:base64
+    })}).then(r=>{
+      if(!r.ok)throw 0;
+      insertAtCursor($('body'),'\n![画像]('+name+')\n');
+      msg('画像を挿入しました','ok');
+    });
+  }).catch(()=>msg('画像のアップロードに失敗しました','err'))
+    .finally(()=>{$('imgFile').value=''});
+});
+function shrink(file){
+  return new Promise((res,rej)=>{
+    // GIFはアニメ保持のためそのまま
+    if(file.type==='image/gif'){
+      const r=new FileReader();
+      r.onload=()=>res({base64:r.result.split(',')[1],ext:'gif'});
+      r.onerror=rej;r.readAsDataURL(file);
+      return;
+    }
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let w=img.width,h=img.height;
+      if(Math.max(w,h)>IMG_MAX){
+        const k=IMG_MAX/Math.max(w,h);
+        w=Math.round(w*k);h=Math.round(h*k);
+      }
+      const c=document.createElement('canvas');
+      c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      const png=file.type==='image/png';
+      const dataUrl=c.toDataURL(png?'image/png':'image/jpeg',0.85);
+      res({base64:dataUrl.split(',')[1],ext:png?'png':'jpg'});
+    };
+    img.onerror=rej;
+    img.src=url;
+  });
+}
+function insertAtCursor(ta,text){
+  const s=ta.selectionStart,e=ta.selectionEnd,v=ta.value;
+  ta.value=v.slice(0,s)+text+v.slice(e);
+  ta.selectionStart=ta.selectionEnd=s+text.length;
+  ta.focus();
+}
+
 // ===== 設定 =====
 function showConfig(){
   $('config').hidden=false;
   if(cfg){$('repo').value=cfg.repo;$('token').value=cfg.token}
+  $('gc').value=settings.goatcounter||'';
 }
 $('setup').addEventListener('click',showConfig);
 $('saveConfig').addEventListener('click',()=>{
@@ -216,11 +312,17 @@ $('saveConfig').addEventListener('click',()=>{
   if(!token){alert('トークンを入力してください');return}
   cfg={repo:repo,token:token};
   localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
+  const gc=$('gc').value.trim().replace(/^https?:\/\//,'').replace(/\.goatcounter\.com.*$/,'');
+  const gcChanged=gc!==(settings.goatcounter||'');
+  settings.goatcounter=gc;
   $('config').hidden=true;
   load();
+  if(gcChanged){
+    saveSettings().catch(()=>alert('GoatCounterコードの保存に失敗しました'));
+  }else{applySettings()}
 });
 
-if(cfg){load()}else{showConfig();$('status').textContent='— 初回設定をしてください —'}
+if(cfg){load();loadSettings()}else{showConfig();$('status').textContent='— 初回設定をしてください —'}
 </script>
 </body>
 </html>
