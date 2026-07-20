@@ -125,7 +125,7 @@ function makePlate(p,no,link){
   art.innerHTML=
     '<div class="plate-head">'
     +(link?'<a href="'+permalink+'"><span class="serial">No.'+pad(no,3)+'</span></a>':'<span class="serial">No.'+pad(no,3)+'</span>')
-    +'<span>'+fmt(p.ts)+(p.edited?' ・改':'')+'</span>'
+    +'<span>'+fmt(p.ts)+'</span>'
     +'</div>'
     +(p.title?'<div class="plate-title">'+esc(p.title)+'</div>':'')
     +'<div class="plate-body">'+md(p.body)+'</div>';
